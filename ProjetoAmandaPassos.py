@@ -201,8 +201,23 @@ class BLEDistanceServer:
         try:
             logger.info("🔧 Configurando Servidor BLE...")
             
-            # Criar peripheral BLE com configuração simples
+            # Detectar adaptador Bluetooth
+            try:
+                dongles = adapter.Adapter.available()
+                if dongles:
+                    adapter_address = dongles[0]
+                    logger.info(f"📡 Usando adaptador: {adapter_address}")
+                else:
+                    raise Exception("Nenhum adaptador Bluetooth encontrado")
+            except Exception as e:
+                logger.error(f"❌ Erro ao detectar adaptador: {e}")
+                logger.info("🧪 Executando apenas medições do sensor...")
+                self.run_sensor_only()
+                return
+            
+            # Criar peripheral BLE com adaptador detectado
             self.peripheral = peripheral.Peripheral(
+                adapter_address=adapter_address,
                 local_name=BLE_DEVICE_NAME
             )
             
@@ -262,13 +277,16 @@ class BLEDistanceServer:
             logger.info("🔍 Soluções:")
             logger.info("1. sudo systemctl restart bluetooth")
             logger.info("2. sudo hciconfig hci0 up")
-            logger.info("3. pip install --force-reinstall bluezero")
+            logger.info("3. sudo hciconfig hci0 leadv")
+            logger.info("4. pip install --force-reinstall bluezero")
+            logger.info("\n🧪 Tentando modo apenas sensor...")
+            self.run_sensor_only()
             
         finally:
             global measurement_active
             measurement_active = False
             self.sensor.cleanup()
-            logger.info("🧹 Recursos limpos")
+            logger.info("�� Recursos limpos")
     
     def run_sensor_only(self):
         """Executa apenas as medições do sensor (sem BLE)"""
