@@ -2,7 +2,7 @@
 
 Sistema de acessibilidade que usa sensor ultrassônico HC-SR04 e Bluetooth Low Energy para comunicação com smartwatch.
 
-## 🔧 Instalação Automática
+## 🔧 Instalação Rápida
 
 Execute o script de instalação:
 
@@ -12,39 +12,19 @@ bash install.sh
 sudo reboot
 ```
 
-## 📱 Instalação Manual
+## 📱 Dependências Necessárias
 
-### 1. Dependências do Sistema
-
+### Sistema:
 ```bash
-sudo apt update && sudo apt upgrade -y
-
-sudo apt install -y \
-    python3-pip python3-venv \
-    bluetooth bluez bluez-tools \
-    libglib2.0-dev libcairo2-dev \
-    libgirepository1.0-dev pkg-config \
-    python3-gi python3-gi-cairo \
-    gir1.2-gtk-3.0
+sudo apt install -y python3-pip python3-venv bluetooth bluez python3-gi
 ```
 
-### 2. Configurar Bluetooth
-
+### Python:
 ```bash
-sudo systemctl enable bluetooth
-sudo systemctl start bluetooth
-sudo usermod -a -G bluetooth $USER
-```
-
-### 3. Ambiente Python
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
 pip install bluezero PyGObject RPi.GPIO
 ```
 
-## ⚡ Hardware - Sensor HC-SR04
+## ⚡ Hardware - HC-SR04
 
 ### Conexões:
 
@@ -64,9 +44,7 @@ Raspberry Pi          HC-SR04
     GND      ------>  GND
 ```
 
-## 🚀 Uso
-
-### Executar Programa
+## 🚀 Executar
 
 ```bash
 # Ativar ambiente virtual
@@ -76,20 +54,7 @@ source venv/bin/activate
 python3 ProjetoAmandaPassos.py
 ```
 
-### Como Serviço (Auto-inicialização)
-
-```bash
-# Habilitar serviço
-sudo systemctl enable smartassebility
-
-# Iniciar serviço
-sudo systemctl start smartassebility
-
-# Ver logs
-sudo journalctl -u smartassebility -f
-```
-
-## 📡 Configuração BLE
+## 📡 BLE Config
 
 O programa cria um dispositivo BLE com:
 
@@ -97,51 +62,23 @@ O programa cria um dispositivo BLE com:
 - **Serviço UUID**: `12345678-1234-5678-1234-56789abcdef0`
 - **Característica UUID**: `12345678-1234-5678-1234-56789abcdef1`
 
-## 🔍 Troubleshooting
+## 🔍 Problemas
 
-### Problemas Comuns
-
-#### 1. Bluetooth não funciona
+### Bluezero não reconhecido
 ```bash
-sudo systemctl status bluetooth
-sudo hciconfig hci0 up
+# No Windows (desenvolvimento)
+# Os erros são normais - o código roda na Raspberry Pi
+
+# Na Raspberry Pi
+pip install bluezero
 sudo systemctl restart bluetooth
 ```
 
-#### 2. Permissões GPIO
+### Permissões
 ```bash
+sudo usermod -a -G bluetooth $USER
 sudo usermod -a -G gpio $USER
 sudo reboot
-```
-
-#### 3. Import bluezero falha
-```bash
-# Verificar instalação
-pip list | grep bluezero
-
-# Reinstalar se necessário
-pip install --force-reinstall bluezero
-```
-
-#### 4. Sensor não responde
-- Verificar conexões físicas
-- Testar com multímetro
-- Verificar alimentação 5V
-
-### Comandos de Debug
-
-```bash
-# Ver dispositivos Bluetooth
-hciconfig -a
-
-# Escanear dispositivos BLE
-sudo hcitool lescan
-
-# Monitor GPIO
-gpio readall  # Se wiringpi instalado
-
-# Logs do sistema
-sudo journalctl -u bluetooth -f
 ```
 
 ## 📊 Formato dos Dados
