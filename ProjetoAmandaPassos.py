@@ -4,11 +4,25 @@ Sistema de Acessibilidade com Sensor Ultrassônico
 Servidor BLE que expõe leituras de distância via Bluetooth Low Energy
 """
 
-from bluezero import peripheral
-import RPi.GPIO as GPIO
+try:
+    from bluezero import peripheral
+    from bluezero import adapter
+    BLUEZERO_AVAILABLE = True
+except ImportError:
+    print("⚠️  bluezero não disponível - modo de teste")
+    BLUEZERO_AVAILABLE = False
+
+try:
+    import RPi.GPIO as GPIO
+    GPIO_AVAILABLE = True
+except ImportError:
+    print("⚠️  RPi.GPIO não disponível - usando simulação")
+    GPIO_AVAILABLE = False
+
 import time
 import threading
 import logging
+import random
 from gi.repository import GLib
 
 # Configuração de logging
@@ -22,9 +36,9 @@ logger = logging.getLogger(__name__)
 TRIG_PIN = 23
 ECHO_PIN = 24
 
-# Configuração BLE
-BLE_SERVICE_UUID = '12345678-1234-5678-1234-56789abcdef0'  # UUID customizado
-BLE_CHARACTERISTIC_UUID = '12345678-1234-5678-1234-56789abcdef1'  # UUID customizado
+# Configuração BLE - UUIDs mais simples
+BLE_SERVICE_UUID = '180F'  # Battery Service UUID (mais simples)
+BLE_CHARACTERISTIC_UUID = '2A19'  # Battery Level Characteristic
 BLE_DEVICE_NAME = 'SmartAssebility-RPi'
 
 # Variáveis globais
@@ -32,40 +46,80 @@ current_distance = 0
 distance_lock = threading.Lock()
 measurement_active = True
 
+class MockGPIO:
+    """Mock GPIO para testes quando RPi.GPIO não está disponível"""
+    BCM = 'BCM'
+    OUT = 'OUT'
+    IN = 'IN'
+    
+    @staticmethod
+    def setwarnings(value):
+        pass
+    
+    @staticmethod
+    def setmode(mode):
+        pass
+    
+    @staticmethod
+    def setup(pin, mode):
+        pass
+    
+    @staticmethod
+    def output(pin, value):
+        pass
+    
+    @staticmethod
+    def input(pin):
+        return random.choice([0, 1])
+    
+    @staticmethod
+    def cleanup():
+        pass
+
 class UltrasonicSensor:
     """Classe para gerenciar o sensor ultrassônico HC-SR04"""
     
     def __init__(self, trig_pin, echo_pin):
         self.trig_pin = trig_pin
         self.echo_pin = echo_pin
+        self.gpio = GPIO if GPIO_AVAILABLE else MockGPIO()
         self.setup_gpio()
         
     def setup_gpio(self):
         """Configura os pinos GPIO"""
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.trig_pin, GPIO.OUT)
-        GPIO.setup(self.echo_pin, GPIO.IN)
-        GPIO.output(self.trig_pin, False)
-        time.sleep(0.5)  # Aguarda estabilização
+        if GPIO_AVAILABLE:
+            self.gpio.setwarnings(False)
+            self.gpio.setmode(self.gpio.BCM)
+            self.gpio.setup(self.trig_pin, self.gpio.OUT)
+            self.gpio.setup(self.echo_pin, self.gpio.IN)
+            self.gpio.output(self.trig_pin, False)
+            time.sleep(0.5)
+        else:
+            logger.info("🔧 Usando GPIO simulado para testes")
         
     def measure_distance(self):
         """Mede distância com o sensor HC-SR04"""
+        if not GPIO_AVAILABLE:
+            # Simulação para testes
+            distance = random.uniform(10, 200)
+            logger.debug(f"📏 Distância simulada: {distance:.1f} cm")
+            return round(distance, 1)
+            
         try:
             # Garante que o trigger está em LOW
-            GPIO.output(self.trig_pin, False)
+            self.gpio.output(self.trig_pin, False)
             time.sleep(0.002)
             
             # Envia pulso de trigger (10µs)
-            GPIO.output(self.trig_pin, True)
+            self.gpio.output(self.trig_pin, True)
             time.sleep(0.00001)
-            GPIO.output(self.trig_pin, False)
+            self.gpio.output(self.trig_pin, False)
             
             # Aguarda início do pulso de echo
             timeout_start = time.time()
             pulse_start = time.time()
             
-            while GPIO.input(self.echo_pin) == 0:
+            while self.gpio.input(self.echo_pin) == 0:
                 pulse_start = time.time()
                 if (pulse_start - timeout_start) > 0.1:
                     logger.warning("Timeout aguardando início do pulso")
@@ -75,7 +129,7 @@ class UltrasonicSensor:
             timeout_start = time.time()
             pulse_end = time.time()
             
-            while GPIO.input(self.echo_pin) == 1:
+            while self.gpio.input(self.echo_pin) == 1:
                 pulse_end = time.time()
                 if (pulse_end - timeout_start) > 0.1:
                     logger.warning("Timeout aguardando fim do pulso")
@@ -99,7 +153,8 @@ class UltrasonicSensor:
             
     def cleanup(self):
         """Limpa os recursos GPIO"""
-        GPIO.cleanup()
+        if GPIO_AVAILABLE:
+            self.gpio.cleanup()
 
 class BLEDistanceServer:
     """Servidor BLE para expor leituras de distância"""
@@ -117,9 +172,9 @@ class BLEDistanceServer:
             
         logger.info(f"📏 Cliente leu distância: {distance} cm")
         
-        # Formata como JSON para melhor estrutura
-        response = f'{{"distance": {distance}, "unit": "cm"}}'
-        return [ord(c) for c in response]
+        # Retorna apenas o valor da distância como string simples
+        distance_str = str(int(distance)) if distance else "0"
+        return [ord(c) for c in distance_str]
     
     def update_measurements(self):
         """Thread para atualizar medições continuamente"""
@@ -133,54 +188,48 @@ class BLEDistanceServer:
                     current_distance = distance
                 logger.debug(f"Distância atualizada: {distance} cm")
             
-            time.sleep(0.5)  # Atualiza a cada 500ms
+            time.sleep(1.0)  # Atualiza a cada 1 segundo
     
     def start(self):
         """Inicia o servidor BLE"""
+        if not BLUEZERO_AVAILABLE:
+            logger.error("❌ bluezero não disponível - instale com: pip install bluezero")
+            logger.info("🧪 Executando apenas medições do sensor...")
+            self.run_sensor_only()
+            return
+            
         try:
             logger.info("🔧 Configurando Servidor BLE...")
             
-            # Detectar adaptador automaticamente
-            try:
-                from bluezero import adapter
-                dongles = adapter.Adapter.available()
-                if dongles:
-                    adapter_address = dongles[0]
-                    logger.info(f"Usando adaptador: {adapter_address}")
-                else:
-                    raise Exception("Nenhum adaptador Bluetooth encontrado")
-            except:
-                # Fallback para endereço padrão
-                adapter_address = None
-                logger.warning("Usando adaptador padrão")
-            
-            # Criar peripheral BLE
+            # Criar peripheral BLE com configuração simples
             self.peripheral = peripheral.Peripheral(
-                adapter_address=adapter_address,
                 local_name=BLE_DEVICE_NAME
             )
             
-            # Adicionar serviço customizado
+            logger.info("📡 Adicionando serviço BLE...")
+            
+            # Adicionar serviço usando UUID padrão
             self.peripheral.add_service(
                 srv_id=1,
                 uuid=BLE_SERVICE_UUID,
                 primary=True
             )
             
-            # Adicionar característica de distância
+            logger.info("📊 Adicionando característica...")
+            
+            # Adicionar característica com configuração simples
             self.peripheral.add_characteristic(
                 srv_id=1,
                 chr_id=1,
                 uuid=BLE_CHARACTERISTIC_UUID,
-                value=[],
+                value="0",
                 notifying=False,
-                flags=['read', 'notify'],
-                read_callback=self.read_distance_callback,
-                write_callback=None,
-                notify_callback=None
+                flags=['read'],
+                read_callback=self.read_distance_callback
             )
             
             # Iniciar thread de medições
+            logger.info("🔄 Iniciando medições...")
             measurement_thread = threading.Thread(
                 target=self.update_measurements,
                 daemon=True
@@ -191,47 +240,74 @@ class BLEDistanceServer:
             self.peripheral.publish()
             
             logger.info("✅ Servidor BLE iniciado com sucesso!")
-            logger.info(f"📱 Nome do dispositivo: '{BLE_DEVICE_NAME}'")
-            logger.info(f"🔗 UUID do Serviço: {BLE_SERVICE_UUID}")
-            logger.info(f"📊 UUID da Característica: {BLE_CHARACTERISTIC_UUID}")
-            logger.info("⏳ Aguardando conexões BLE...")
-            logger.info("🛑 Pressione Ctrl+C para parar\n")
+            logger.info(f"📱 Nome: '{BLE_DEVICE_NAME}'")
+            logger.info(f"🔗 Serviço: {BLE_SERVICE_UUID}")
+            logger.info(f"📊 Característica: {BLE_CHARACTERISTIC_UUID}")
+            logger.info("⏳ Aguardando conexões...\n")
             
             # Testar sensor
             test_distance = self.sensor.measure_distance()
             if test_distance:
-                logger.info(f"🧪 Teste do sensor OK: {test_distance} cm\n")
-            else:
-                logger.warning("⚠️  Teste do sensor falhou - verifique conexões\n")
+                logger.info(f"🧪 Sensor OK: {test_distance} cm\n")
             
             # Executar loop principal
             main_loop = GLib.MainLoop()
             main_loop.run()
             
         except KeyboardInterrupt:
-            logger.info("\n🛑 Encerrando servidor BLE...")
+            logger.info("\n🛑 Encerrando...")
             
         except Exception as e:
-            logger.error(f"\n❌ Erro: {e}")
-            logger.info("\n🔍 Verificações:")
-            logger.info("1. Bluetooth ativo: sudo systemctl status bluetooth")
-            logger.info("2. Adaptador ativo: sudo hciconfig hci0 up")
-            logger.info("3. Permissões: sudo usermod -a -G bluetooth $USER")
-            logger.info("4. Dependências: pip install bluezero PyGObject")
-            logger.info("5. Reiniciar Bluetooth: sudo systemctl restart bluetooth")
+            logger.error(f"\n❌ Erro BLE: {e}")
+            logger.info("🔍 Soluções:")
+            logger.info("1. sudo systemctl restart bluetooth")
+            logger.info("2. sudo hciconfig hci0 up")
+            logger.info("3. pip install --force-reinstall bluezero")
             
         finally:
             global measurement_active
             measurement_active = False
             self.sensor.cleanup()
             logger.info("🧹 Recursos limpos")
+    
+    def run_sensor_only(self):
+        """Executa apenas as medições do sensor (sem BLE)"""
+        try:
+            logger.info("🧪 Modo teste - apenas sensor")
+            
+            measurement_thread = threading.Thread(
+                target=self.update_measurements,
+                daemon=True
+            )
+            measurement_thread.start()
+            
+            while True:
+                with distance_lock:
+                    distance = current_distance
+                logger.info(f"📏 Distância atual: {distance} cm")
+                time.sleep(2)
+                
+        except KeyboardInterrupt:
+            logger.info("\n🛑 Encerrando...")
+        finally:
+            global measurement_active
+            measurement_active = False
+            self.sensor.cleanup()
 
 def main():
     """Função principal"""
+    logger.info("🚀 Iniciando SmartAssebility...")
+    
+    # Verificar dependências
+    if not BLUEZERO_AVAILABLE:
+        logger.warning("⚠️  bluezero não encontrado")
+    if not GPIO_AVAILABLE:
+        logger.warning("⚠️  RPi.GPIO não encontrado")
+    
     # Criar sensor
     sensor = UltrasonicSensor(TRIG_PIN, ECHO_PIN)
     
-    # Criar e iniciar servidor BLE
+    # Criar e iniciar servidor
     server = BLEDistanceServer(sensor)
     server.start()
 
