@@ -201,38 +201,31 @@ class BLEDistanceServer:
         try:
             logger.info("🔧 Configurando Servidor BLE...")
             
-            # Detectar adaptador Bluetooth
+            # Abordagem mais simples - sem especificar adapter_address
             try:
-                dongles = list(adapter.Adapter.available())
-                if dongles:
-                    # Extrair endereço do objeto Adapter
-                    adapter_obj = dongles[0]
-                    if hasattr(adapter_obj, 'address'):
-                        adapter_address = adapter_obj.address
-                    elif hasattr(adapter_obj, 'path'):
-                        # Usar path como fallback (ex: /org/bluez/hci0)
-                        adapter_address = adapter_obj.path.split('/')[-1]  # Extrai 'hci0'
-                    else:
-                        # Se tudo falhar, usar string do objeto
-                        adapter_address = str(adapter_obj)
+                logger.info("📡 Tentando criar Peripheral sem adaptador específico...")
+                self.peripheral = peripheral.Peripheral(
+                    local_name=BLE_DEVICE_NAME
+                )
+                logger.info("✅ Peripheral criado com adaptador padrão")
+                
+            except Exception as e1:
+                logger.warning(f"⚠️ Falha com adaptador padrão: {e1}")
+                
+                # Fallback: tentar com None
+                try:
+                    logger.info("📡 Tentando com adapter_address=None...")
+                    self.peripheral = peripheral.Peripheral(
+                        adapter_address=None,
+                        local_name=BLE_DEVICE_NAME
+                    )
+                    logger.info("✅ Peripheral criado com adapter_address=None")
                     
-                    logger.info(f"📡 Usando adaptador: {adapter_address}")
-                else:
-                    # Fallback: tentar adaptador padrão
-                    logger.warning("Nenhum adaptador encontrado, tentando adaptador padrão...")
-                    adapter_address = "/org/bluez/hci0"
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Erro na detecção automática: {e}")
-                # Fallback: usar path padrão do adaptador
-                adapter_address = "/org/bluez/hci0"
-                logger.info("📡 Usando adaptador padrão: /org/bluez/hci0")
-            
-            # Criar peripheral BLE com adaptador detectado
-            self.peripheral = peripheral.Peripheral(
-                adapter_address=adapter_address,
-                local_name=BLE_DEVICE_NAME
-            )
+                except Exception as e2:
+                    logger.error(f"❌ Falha total na criação do Peripheral: {e2}")
+                    logger.info("🧪 Executando apenas medições do sensor...")
+                    self.run_sensor_only()
+                    return
             
             logger.info("📡 Adicionando serviço BLE...")
             
