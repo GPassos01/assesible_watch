@@ -203,17 +203,20 @@ class BLEDistanceServer:
             
             # Detectar adaptador Bluetooth
             try:
-                dongles = adapter.Adapter.available()
+                dongles = list(adapter.Adapter.available())
                 if dongles:
                     adapter_address = dongles[0]
                     logger.info(f"📡 Usando adaptador: {adapter_address}")
                 else:
-                    raise Exception("Nenhum adaptador Bluetooth encontrado")
+                    # Fallback: tentar adaptador padrão
+                    logger.warning("Nenhum adaptador encontrado, tentando adaptador padrão...")
+                    adapter_address = "hci0"
+                    
             except Exception as e:
-                logger.error(f"❌ Erro ao detectar adaptador: {e}")
-                logger.info("🧪 Executando apenas medições do sensor...")
-                self.run_sensor_only()
-                return
+                logger.warning(f"⚠️ Erro na detecção automática: {e}")
+                # Fallback: usar adaptador padrão
+                adapter_address = "hci0"
+                logger.info("📡 Usando adaptador padrão: hci0")
             
             # Criar peripheral BLE com adaptador detectado
             self.peripheral = peripheral.Peripheral(
