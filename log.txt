@@ -1,0 +1,63 @@
+(venv) aluno@raspberrypi:~/Documentos/assesible_watch $ python3 test_visibility.py 
+🚀 Teste de Visibilidade BLE - SmartAssebility
+==================================================
+🔍 Verificando status do Bluetooth...
+
+🔧 Status do serviço bluetooth...
+✅ Sucesso: active
+
+🔧 Listando adaptadores...
+✅ Sucesso: hci0:	Type: Primary  Bus: UART
+	BD Address: D8:3A:DD:20:0F:D1  ACL MTU: 1021:8  SCO MTU: 64:1
+	UP RUNNING PSCAN ISCAN 
+	RX bytes:13983 acl:0 sco:0 events:781 errors:0
+	TX bytes:75659 acl:0 sco:0 commands:539 errors:0
+
+🔧 Status do hci0...
+✅ Sucesso: hci0:	Type: Primary  Bus: UART
+	BD Address: D8:3A:DD:20:0F:D1  ACL MTU: 1021:8  SCO MTU: 64:1
+	UP RUNNING PSCAN ISCAN 
+	RX bytes:13983 acl:0 sco:0 events:781 errors:0
+	TX bytes:75659 acl:0 sco:0 commands:539 errors:0
+
+📡 Testando BLE Advertising...
+
+🔧 Parando advertising anterior...
+❌ Erro: LE set advertise enable on hci0 returned status 12
+
+🔧 Configurando advertising data...
+✅ Sucesso: < HCI Command: ogf 0x08, ocf 0x0008, plen 3
+  18 FF 00 
+> HCI Event: 0x0e plen 4
+  01 08 20 00
+
+🔧 Ativando advertising...
+✅ Sucesso: < HCI Command: ogf 0x08, ocf 0x000a, plen 1
+  01 
+> HCI Event: 0x0e plen 4
+  01 0A 20 00
+✅ Advertising ativo!
+
+⏳ Advertising ativo por 30 segundos...
+🔍 Agora tente escanear com o Galaxy Watch5!
+
+🔧 Parando advertising...
+✅ Sucesso: < HCI Command: ogf 0x08, ocf 0x000a, plen 1
+  00 
+> HCI Event: 0x0e plen 4
+  01 0A 20 00
+
+🔍 Escaneando dispositivos BLE...
+❌ Nenhum dispositivo encontrado
+
+📱 Para testar de outro dispositivo:
+1. No Android, use um app como 'BLE Scanner' ou 'nRF Connect'
+2. Procure por 'SmartAssebility' na lista
+3. Se aparecer, o advertising está funcionando
+4. Se não aparecer, tente os comandos de correção abaixo
+
+🔧 Comandos úteis:
+- Reiniciar Bluetooth: sudo systemctl restart bluetooth
+- Ativar hci0: sudo hciconfig hci0 up
+- Verificar advertising: sudo hcidump -i hci0
+- Ver logs: sudo journalctl -f -u bluetooth
