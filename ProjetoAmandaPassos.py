@@ -205,18 +205,28 @@ class BLEDistanceServer:
             try:
                 dongles = list(adapter.Adapter.available())
                 if dongles:
-                    adapter_address = dongles[0]
+                    # Extrair endereço do objeto Adapter
+                    adapter_obj = dongles[0]
+                    if hasattr(adapter_obj, 'address'):
+                        adapter_address = adapter_obj.address
+                    elif hasattr(adapter_obj, 'path'):
+                        # Usar path como fallback (ex: /org/bluez/hci0)
+                        adapter_address = adapter_obj.path.split('/')[-1]  # Extrai 'hci0'
+                    else:
+                        # Se tudo falhar, usar string do objeto
+                        adapter_address = str(adapter_obj)
+                    
                     logger.info(f"📡 Usando adaptador: {adapter_address}")
                 else:
                     # Fallback: tentar adaptador padrão
                     logger.warning("Nenhum adaptador encontrado, tentando adaptador padrão...")
-                    adapter_address = "hci0"
+                    adapter_address = "/org/bluez/hci0"
                     
             except Exception as e:
                 logger.warning(f"⚠️ Erro na detecção automática: {e}")
-                # Fallback: usar adaptador padrão
-                adapter_address = "hci0"
-                logger.info("📡 Usando adaptador padrão: hci0")
+                # Fallback: usar path padrão do adaptador
+                adapter_address = "/org/bluez/hci0"
+                logger.info("📡 Usando adaptador padrão: /org/bluez/hci0")
             
             # Criar peripheral BLE com adaptador detectado
             self.peripheral = peripheral.Peripheral(
